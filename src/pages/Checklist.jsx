@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../contexts/AuthContext'
-import { Camera, X, Loader2, ChevronDown, ChevronUp, ImagePlus, StickyNote } from 'lucide-react'
+import { Camera, X, Loader2, ChevronDown, ChevronUp, ImagePlus, StickyNote, CheckCircle2, Trash2 } from 'lucide-react'
 
 export default function Checklist() {
   const { profile } = useAuth()
@@ -20,6 +20,8 @@ export default function Checklist() {
   const [expandedItem, setExpandedItem] = useState(null)
   const [saving, setSaving] = useState({})
   const [loading, setLoading] = useState(true)
+  const [photoConfirmed, setPhotoConfirmed] = useState({}) // item_id → bool
+  const [uploadingPhoto, setUploadingPhoto] = useState({}) // item_id → bool
 
   useEffect(() => { loadStaticData() }, [])
 
@@ -162,11 +164,18 @@ export default function Checklist() {
     setResponses(r => ({ ...r, [itemId]: { ...r[itemId], notes } }))
   }
 
+  function showPhotoConfirm(itemId) {
+    setPhotoConfirmed(c => ({ ...c, [itemId]: true }))
+    setTimeout(() => setPhotoConfirmed(c => ({ ...c, [itemId]: false })), 2500)
+  }
+
   // Upload photo for punch items
   async function handlePunchPhotoUpload(e, itemId) {
     const punch = punches[itemId]
     if (!punch) return
     const files = Array.from(e.target.files)
+    if (!files.length) return
+    setUploadingPhoto(u => ({ ...u, [itemId]: true }))
     for (const file of files) {
       const ext = file.name.split('.').pop()
       const path = `punches/${punch.id}/${Date.now()}.${ext}`
@@ -178,6 +187,8 @@ export default function Checklist() {
         .select().single()
       if (photo) setPunchPhotos(ph => ({ ...ph, [punch.id]: [...(ph[punch.id] || []), photo] }))
     }
+    setUploadingPhoto(u => ({ ...u, [itemId]: false }))
+    showPhotoConfirm(itemId)
     e.target.value = ''
   }
 
@@ -186,6 +197,8 @@ export default function Checklist() {
     const resp = responses[itemId]
     if (!resp) return
     const files = Array.from(e.target.files)
+    if (!files.length) return
+    setUploadingPhoto(u => ({ ...u, [itemId]: true }))
     for (const file of files) {
       const ext = file.name.split('.').pop()
       const path = `responses/${resp.id}/${Date.now()}.${ext}`
@@ -197,7 +210,30 @@ export default function Checklist() {
         .select().single()
       if (photo) setRespPhotos(rp => ({ ...rp, [resp.id]: [...(rp[resp.id] || []), photo] }))
     }
+    setUploadingPhoto(u => ({ ...u, [itemId]: false }))
+    showPhotoConfirm(itemId)
     e.target.value = ''
+  }
+
+  async function deletePunch(itemId) {
+    const punch = punches[itemId]
+    const resp = responses[itemId]
+    if (!punch) return
+    if (!window.confirm('Delete this punch point and reset to blank?')) return
+    // Delete all photos from storage
+    const photos = punchPhotos[punch.id] || []
+    for (const ph of photos) {
+      await supabase.storage.from('punch-photos').remove([ph.storage_path])
+    }
+    await supabase.from('punch_photos').delete().eq('punch_id', punch.id)
+    await supabase.from('punch_points').delete().eq('id', punch.id)
+    if (resp) {
+      await supabase.from('checklist_responses').update({ status: null }).eq('id', resp.id)
+      setResponses(r => ({ ...r, [itemId]: { ...r[itemId], status: null } }))
+    }
+    setPunches(p => { const n = { ...p }; delete n[itemId]; return n })
+    setPunchPhotos(ph => { const n = { ...ph }; delete n[punch.id]; return n })
+    setExpandedItem(null)
   }
 
   async function removePunchPhoto(photo, itemId) {
@@ -318,20 +354,21 @@ export default function Checklist() {
                   {/* OK expanded panel — photos + notes */}
                   {isExpanded && isOk && (
                     <div className="bg-green-50 border-t border-green-100 px-4 py-4 space-y-3">
-                      <p className="text-xs font-semibold text-green-700 flex items-center gap-1">
-                        <ImagePlus size={13} /> Photos &amp; Notes for this OK item
-                      </p>
+                      <div className="flex items-center justify-between">
+                        <p className="text-xs font-semibold text-green-700 flex items-center gap-1">
+                          <ImagePlus size={13} /> Photos &amp; Notes
+                        </p>
+                        <button onClick={() => setExpandedItem(null)}
+                          className="text-xs font-semibold text-gray-500 border border-gray-300 rounded-lg px-3 py-1 hover:bg-white">
+                          Done
+                        </button>
+                      </div>
 
                       {/* Notes */}
                       <div>
                         <label className="block text-xs font-semibold text-gray-600 mb-1">Notes</label>
-                        <textarea
-                          rows={2}
-                          defaultValue={resp?.notes || ''}
-                          placeholder="Add observation notes…"
-                          onBlur={e => updateNotes(item.id, e.target.value)}
-                          className="resize-none w-full"
-                        />
+                        <textarea rows={2} defaultValue={resp?.notes || ''} placeholder="Add observation notes…"
+                          onBlur={e => updateNotes(item.id, e.target.value)} className="resize-none w-full" />
                       </div>
 
                       {/* Photos */}
@@ -347,20 +384,39 @@ export default function Checklist() {
                               </button>
                             </div>
                           ))}
-                          <label className="w-20 h-20 rounded-lg border-2 border-dashed border-green-300 flex flex-col items-center justify-center cursor-pointer hover:bg-green-50 transition-colors text-green-500">
-                            <Camera size={20} />
-                            <span className="text-xs mt-1">Add</span>
+                          <label className={`w-20 h-20 rounded-lg border-2 border-dashed border-green-300 flex flex-col items-center justify-center cursor-pointer hover:bg-green-50 transition-colors ${uploadingPhoto[item.id] ? 'opacity-50 pointer-events-none' : 'text-green-500'}`}>
+                            {uploadingPhoto[item.id]
+                              ? <Loader2 size={20} className="animate-spin text-green-500" />
+                              : <><Camera size={20} /><span className="text-xs mt-1">Add</span></>}
                             <input type="file" accept="image/*" capture="environment" multiple className="hidden"
                               onChange={e => handleRespPhotoUpload(e, item.id)} />
                           </label>
                         </div>
+                        {photoConfirmed[item.id] && (
+                          <div className="mt-2 flex items-center gap-1.5 text-green-600 text-xs font-semibold animate-pulse">
+                            <CheckCircle2 size={14} /> Photo saved successfully
+                          </div>
+                        )}
                       </div>
+
+                      <button onClick={() => setExpandedItem(null)}
+                        className="w-full py-2 rounded-xl text-sm font-semibold text-white bg-green-600">
+                        Done
+                      </button>
                     </div>
                   )}
 
                   {/* Punch expanded panel */}
                   {isExpanded && isPunch && punch && (
                     <div className="bg-orange-50 border-t border-orange-100 px-4 py-4 space-y-3">
+                      {/* Header with Done */}
+                      <div className="flex items-center justify-between">
+                        <p className="text-xs font-semibold text-orange-700">Punch Details</p>
+                        <button onClick={() => setExpandedItem(null)}
+                          className="text-xs font-semibold text-gray-500 border border-gray-300 rounded-lg px-3 py-1 hover:bg-white">
+                          Done
+                        </button>
+                      </div>
                       {/* Priority */}
                       <div>
                         <label className="block text-xs font-semibold text-gray-600 mb-1">Priority *</label>
@@ -417,13 +473,32 @@ export default function Checklist() {
                               </button>
                             </div>
                           ))}
-                          <label className="w-20 h-20 rounded-lg border-2 border-dashed border-orange-300 flex flex-col items-center justify-center cursor-pointer hover:bg-orange-50 transition-colors text-orange-400">
-                            <Camera size={20} />
-                            <span className="text-xs mt-1">Add</span>
+                          <label className={`w-20 h-20 rounded-lg border-2 border-dashed border-orange-300 flex flex-col items-center justify-center cursor-pointer hover:bg-orange-50 transition-colors ${uploadingPhoto[item.id] ? 'opacity-50 pointer-events-none' : 'text-orange-400'}`}>
+                            {uploadingPhoto[item.id]
+                              ? <Loader2 size={20} className="animate-spin text-orange-400" />
+                              : <><Camera size={20} /><span className="text-xs mt-1">Add</span></>}
                             <input type="file" accept="image/*" capture="environment" multiple className="hidden"
                               onChange={e => handlePunchPhotoUpload(e, item.id)} />
                           </label>
                         </div>
+                        {photoConfirmed[item.id] && (
+                          <div className="mt-2 flex items-center gap-1.5 text-green-600 text-xs font-semibold animate-pulse">
+                            <CheckCircle2 size={14} /> Photo saved successfully
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Done + Delete buttons */}
+                      <div className="flex gap-2 pt-1">
+                        <button onClick={() => setExpandedItem(null)}
+                          className="flex-1 py-2 rounded-xl text-sm font-semibold text-white"
+                          style={{ background: '#d85a30' }}>
+                          Done
+                        </button>
+                        <button onClick={() => deletePunch(item.id)}
+                          className="flex items-center gap-1 px-4 py-2 rounded-xl text-sm font-semibold text-red-600 border-2 border-red-200 hover:bg-red-50">
+                          <Trash2 size={14} /> Delete Punch
+                        </button>
                       </div>
                     </div>
                   )}
