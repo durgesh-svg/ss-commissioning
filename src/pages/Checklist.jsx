@@ -313,11 +313,18 @@ export default function Checklist() {
                       <div className="flex-1 min-w-0">
                         <p className="text-sm text-gray-800 leading-snug">{item.description}</p>
                         {/* Media indicator */}
-                        {hasMedia && !isExpanded && (
-                          <div className="flex items-center gap-2 mt-1">
-                            {rphotos.length > 0 && <span className="text-xs text-gray-400">📷 {rphotos.length}</span>}
-                            {pphotos.length > 0 && <span className="text-xs text-gray-400">📷 {pphotos.length}</span>}
-                            {resp?.notes && <span className="text-xs text-gray-400 flex items-center gap-0.5"><StickyNote size={10} /> note</span>}
+                        {!isExpanded && (rphotos.length > 0 || pphotos.length > 0 || resp?.notes) && (
+                          <div className="flex items-center gap-2 mt-1.5 flex-wrap">
+                            {(rphotos.length > 0 || pphotos.length > 0) && (
+                              <span className="inline-flex items-center gap-1 text-xs font-semibold bg-blue-50 text-blue-600 px-2 py-0.5 rounded-full">
+                                <Camera size={11} /> {rphotos.length + pphotos.length} photo{rphotos.length + pphotos.length !== 1 ? 's' : ''}
+                              </span>
+                            )}
+                            {resp?.notes && (
+                              <span className="inline-flex items-center gap-1 text-xs font-semibold bg-gray-100 text-gray-500 px-2 py-0.5 rounded-full">
+                                <StickyNote size={11} /> note
+                              </span>
+                            )}
                           </div>
                         )}
                       </div>
