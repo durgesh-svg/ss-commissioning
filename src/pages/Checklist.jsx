@@ -215,6 +215,21 @@ export default function Checklist() {
     e.target.value = ''
   }
 
+  async function deleteOkResponse(itemId) {
+    const resp = responses[itemId]
+    if (!resp) return
+    if (!window.confirm('Delete photos/notes and reset this item to blank?')) return
+    const photos = respPhotos[resp.id] || []
+    for (const ph of photos) {
+      await supabase.storage.from('punch-photos').remove([ph.storage_path])
+    }
+    await supabase.from('response_photos').delete().eq('response_id', resp.id)
+    await supabase.from('checklist_responses').update({ status: null, notes: null }).eq('id', resp.id)
+    setResponses(r => ({ ...r, [itemId]: { ...r[itemId], status: null, notes: null } }))
+    setRespPhotos(rp => { const n = { ...rp }; delete n[resp.id]; return n })
+    setExpandedItem(null)
+  }
+
   async function deletePunch(itemId) {
     const punch = punches[itemId]
     const resp = responses[itemId]
@@ -405,10 +420,16 @@ export default function Checklist() {
                         )}
                       </div>
 
-                      <button onClick={() => setExpandedItem(null)}
-                        className="w-full py-2 rounded-xl text-sm font-semibold text-white bg-green-600">
-                        Done
-                      </button>
+                      <div className="flex gap-2 pt-1">
+                        <button onClick={() => setExpandedItem(null)}
+                          className="flex-1 py-2 rounded-xl text-sm font-semibold text-white bg-green-600">
+                          Done
+                        </button>
+                        <button onClick={() => deleteOkResponse(item.id)}
+                          className="flex items-center gap-1 px-4 py-2 rounded-xl text-sm font-semibold text-red-600 border-2 border-red-200 hover:bg-red-50">
+                          <Trash2 size={14} /> Delete
+                        </button>
+                      </div>
                     </div>
                   )}
 

@@ -276,15 +276,28 @@ export default function PunchList() {
                         </div>
                       )}
 
-                      {/* Site manager: can set In Progress */}
-                      {!profile?.is_admin && punch.status === 'open' && (
-                        <button
-                          onClick={() => updateStatus(punch, 'in_progress')}
-                          disabled={updating[punch.id]}
-                          className="w-full py-2 rounded-lg text-sm font-semibold border-2 border-blue-400 text-blue-600 hover:bg-blue-50 transition-colors"
-                        >
-                          {updating[punch.id] ? 'Updating…' : 'Mark In Progress'}
-                        </button>
+                      {/* Site manager: status progression */}
+                      {!profile?.is_admin && punch.status !== 'closed' && (
+                        <div className="flex gap-2">
+                          {punch.status === 'open' && (
+                            <button
+                              onClick={() => updateStatus(punch, 'in_progress')}
+                              disabled={updating[punch.id]}
+                              className="flex-1 py-2 rounded-lg text-sm font-semibold border-2 border-blue-400 text-blue-600 hover:bg-blue-50 transition-colors"
+                            >
+                              {updating[punch.id] ? 'Updating…' : 'Mark In Progress'}
+                            </button>
+                          )}
+                          {punch.status === 'in_progress' && (
+                            <button
+                              onClick={() => updateStatus(punch, 'closed')}
+                              disabled={updating[punch.id]}
+                              className="flex-1 py-2 rounded-lg text-sm font-semibold border-2 border-green-500 text-green-700 hover:bg-green-50 transition-colors"
+                            >
+                              {updating[punch.id] ? 'Updating…' : 'Mark Closed'}
+                            </button>
+                          )}
+                        </div>
                       )}
 
                       {/* Photos */}
