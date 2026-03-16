@@ -339,14 +339,13 @@ export default function Checklist() {
                           }}
                           disabled={isSaving}
                           className={`btn-punch ${isPunch ? 'active' : ''}`}>Punch</button>
-                        {/* Expand button for OK items */}
+                        {/* Expand button for OK items — same chevron as Punch */}
                         {isOk && (
                           <button
                             onClick={() => setExpandedItem(isExpanded ? null : item.id)}
-                            className={`p-1.5 rounded-lg border transition-colors ${isExpanded ? 'border-orange-400 text-orange-500 bg-orange-50' : 'border-gray-200 text-gray-400 hover:text-gray-600'}`}
-                            title="Add photo / note"
+                            className="text-gray-400 hover:text-gray-600"
                           >
-                            <ImagePlus size={14} />
+                            {isExpanded ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
                           </button>
                         )}
                         {isPunch && (
