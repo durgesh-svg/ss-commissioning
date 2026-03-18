@@ -30,7 +30,7 @@ function isOverdue(punch) {
 }
 
 export default function PunchList() {
-  const { profile } = useAuth()
+  const { profile, userSites } = useAuth()
   const [punches, setPunches] = useState([])
   const [sites, setSites] = useState([])
   const [systems, setSystems] = useState([])
@@ -123,8 +123,9 @@ export default function PunchList() {
     XLSX.writeFile(wb, `punch-list-${new Date().toISOString().slice(0,10)}.xlsx`)
   }
 
+  const allowedSiteIds = userSites.map(s => s.id)
   const filtered = punches.filter(p => {
-    if (!profile?.is_admin && p.site_id !== profile?.site_id) return false
+    if (!profile?.is_admin && !allowedSiteIds.includes(p.site_id)) return false
     if (filterSite && p.site_id !== filterSite) return false
     if (filterSystem && p.system_id !== filterSystem) return false
     if (filterPriority && p.priority !== filterPriority) return false
