@@ -449,8 +449,15 @@ export default function Checklist() {
                     </div>
                   )}
 
+                  {/* Punch loading state — punch record being created */}
+                  {isExpanded && isPunch && !punch && (
+                    <div className="bg-orange-50 border-t border-orange-100 px-4 py-4 flex items-center gap-2 text-orange-600 text-sm">
+                      <Loader2 size={16} className="animate-spin" /> Setting up punch…
+                    </div>
+                  )}
+
                   {/* Punch expanded panel */}
-                  {isExpanded && isPunch && (
+                  {isExpanded && isPunch && punch && (
                     <div className="bg-orange-50 border-t border-orange-100 px-4 py-4 space-y-3">
                       <div className="flex items-center justify-between">
                         <p className="text-xs font-semibold text-orange-700">Punch Details</p>
