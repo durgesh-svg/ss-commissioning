@@ -121,43 +121,36 @@ export default function Checklist() {
 
   async function handleStatus(item, status) {
     const sys = systems[activeSystemIdx]
+    if (!sys) { alert('No system selected'); return }
+    if (!selectedSiteId) { alert('No site selected'); return }
     setSaving(s => ({ ...s, [item.id]: true }))
     try {
-    const existing = responses[item.id]
-
-    if (existing) {
-      const { data, error } = await supabase
-        .from('checklist_responses')
-        .update({ status, updated_at: new Date().toISOString(), updated_by: profile?.id })
-        .eq('id', existing.id).select().single()
-      if (error) { console.error('update error', error); return }
-      setResponses(r => ({ ...r, [item.id]: data }))
-
-      if (status === 'ok' && punches[item.id]) {
-        await supabase.from('punch_points').delete().eq('id', punches[item.id].id)
-        setPunches(p => { const n = { ...p }; delete n[item.id]; return n })
-        setPunchPhotos(ph => { const n = { ...ph }; delete n[punches[item.id]?.id]; return n })
+      const existing = responses[item.id]
+      if (existing) {
+        const { data, error } = await supabase
+          .from('checklist_responses')
+          .update({ status, updated_at: new Date().toISOString(), updated_by: profile?.id })
+          .eq('id', existing.id).select().single()
+        if (error) { alert('Save failed: ' + error.message); return }
+        setResponses(r => ({ ...r, [item.id]: data }))
+        if (status === 'ok' && punches[item.id]) {
+          await supabase.from('punch_points').delete().eq('id', punches[item.id].id)
+          setPunches(p => { const n = { ...p }; delete n[item.id]; return n })
+          setPunchPhotos(ph => { const n = { ...ph }; delete n[punches[item.id]?.id]; return n })
+        }
+        if (status === 'punch' && !punches[item.id]) await createPunch(item, sys, data.id)
+      } else {
+        const { data, error } = await supabase
+          .from('checklist_responses')
+          .insert({ site_id: selectedSiteId, system_id: sys.id, item_id: item.id, status, updated_by: profile?.id })
+          .select().single()
+        if (error) { alert('Save failed: ' + error.message); return }
+        setResponses(r => ({ ...r, [item.id]: data }))
+        if (status === 'punch') await createPunch(item, sys, data.id)
       }
-      if (status === 'punch') {
-        setExpandedItem(item.id)
-        if (!punches[item.id]) await createPunch(item, sys, data.id)
-      }
-    } else {
-      const { data, error } = await supabase
-        .from('checklist_responses')
-        .insert({ site_id: selectedSiteId, system_id: sys.id, item_id: item.id, status, updated_by: profile?.id })
-        .select().single()
-      if (error) { console.error('insert error', error); return }
-      setResponses(r => ({ ...r, [item.id]: data }))
-      if (status === 'punch') {
-        setExpandedItem(item.id)
-        await createPunch(item, sys, data.id)
-      }
-    }
-    // Always auto-open panel
-    setExpandedItem(item.id)
+      setExpandedItem(item.id)
     } catch (err) {
-      console.error('handleStatus error', err)
+      alert('Error: ' + err.message)
     } finally {
       setSaving(s => ({ ...s, [item.id]: false }))
     }
