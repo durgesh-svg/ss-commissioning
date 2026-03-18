@@ -28,7 +28,7 @@ export default function Login() {
       <div className="w-full max-w-sm">
         {/* Logo */}
         <div className="text-center mb-8">
-          <img src="/logo.png" alt="Stockwell Solar" className="h-16 mx-auto mb-3 object-contain" />
+          <img src="/logo1.png" alt="Stockwell Solar" className="h-16 mx-auto mb-3 object-contain" />
           <p className="text-sm font-medium text-gray-500">Pre-Commissioning</p>
         </div>
 

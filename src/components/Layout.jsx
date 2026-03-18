@@ -24,7 +24,7 @@ export default function Layout({ children }) {
     <div className="min-h-screen bg-gray-50 flex flex-col">
       <header className="text-white shadow-md flex items-center justify-between px-4 h-14 shrink-0" style={{ background: '#d85a30' }}>
         <div className="flex items-center gap-2">
-          <img src="/logo.png" alt="Stockwell Solar" style={{ height: '32px', objectFit: 'contain' }} />
+          <img src="/logo1.png" alt="Stockwell Solar" style={{ height: '32px', objectFit: 'contain' }} />
           {profile?.is_admin && (
             <span className="text-orange-100 text-xs bg-orange-700 rounded px-1.5 py-0.5 ml-1">Admin</span>
           )}
