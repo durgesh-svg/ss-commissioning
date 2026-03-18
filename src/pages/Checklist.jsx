@@ -395,10 +395,12 @@ export default function Checklist() {
               const rphotos = respPhotos[resp?.id] || []
               const savedStatus = resp?.status
               const pending = pendingPick[item.id]
-              const isPunch = savedStatus === 'punch'
-              const isOk = savedStatus === 'ok'
-              const isPendingOk = !savedStatus && pending === 'ok'
-              const isPendingPunch = !savedStatus && pending === 'punch'
+              // solid color only after Done pressed (no pending)
+              const isPunch = savedStatus === 'punch' && !pending
+              const isOk = savedStatus === 'ok' && !pending
+              // faded color = saved but Done not yet pressed, OR ok selected but not yet saved
+              const isPendingOk = (savedStatus === 'ok' && pending === 'ok') || (!savedStatus && pending === 'ok')
+              const isPendingPunch = (savedStatus === 'punch' && pending === 'punch')
               const isExpanded = expandedItem === item.id
               const isSaving = saving[item.id]
               const hasPhotoError = photoErrors[item.id]
@@ -441,7 +443,7 @@ export default function Checklist() {
                   </div>
 
                   {/* OK expanded panel */}
-                  {isExpanded && (isOk || isPendingOk) && (
+                  {isExpanded && (isOk || isPendingOk || savedStatus === 'ok') && (
                     <div className="bg-green-50 border-t border-green-100 px-4 py-4 space-y-3">
                       <div className="flex items-center justify-between">
                         <p className="text-xs font-semibold text-green-700 flex items-center gap-1">
@@ -504,7 +506,7 @@ export default function Checklist() {
                   )}
 
                   {/* Punch expanded panel */}
-                  {isExpanded && (isPunch || isPendingPunch) && (
+                  {isExpanded && (isPunch || isPendingPunch || savedStatus === 'punch') && (
                     <div className="bg-orange-50 border-t border-orange-100 px-4 py-4 space-y-3">
                       <div className="flex items-center justify-between">
                         <p className="text-xs font-semibold text-orange-700">Punch Details</p>
