@@ -311,19 +311,31 @@ export default function Checklist() {
   async function deletePunch(itemId) {
     const punch = punches[itemId]
     const resp = responses[itemId]
-    if (!punch) return
-    if (!window.confirm('Delete this punch point and reset to blank?')) return
-    const photos = punchPhotos[punch.id] || []
-    for (const ph of photos) await supabase.storage.from('punch-photos').remove([ph.storage_path])
-    await supabase.from('punch_photos').delete().eq('punch_id', punch.id)
-    await supabase.from('punch_points').delete().eq('id', punch.id)
-    if (resp) {
-      await supabase.from('checklist_responses').update({ status: null }).eq('id', resp.id)
-      setResponses(r => ({ ...r, [itemId]: { ...r[itemId], status: null } }))
+    if (!punch) {
+      alert('Punch record not loaded yet — please wait a moment and try again.')
+      return
     }
-    setPunches(p => { const n = { ...p }; delete n[itemId]; return n })
-    setPunchPhotos(ph => { const n = { ...ph }; delete n[punch.id]; return n })
-    setExpandedItem(null)
+    if (!window.confirm('Delete this punch point and reset to blank?')) return
+    setSaving(s => ({ ...s, [itemId]: true }))
+    try {
+      const photos = punchPhotos[punch.id] || []
+      for (const ph of photos) await supabase.storage.from('punch-photos').remove([ph.storage_path])
+      await supabase.from('punch_photos').delete().eq('punch_id', punch.id)
+      const { error } = await supabase.from('punch_points').delete().eq('id', punch.id)
+      if (error) { alert('Delete failed: ' + error.message); return }
+      if (resp) {
+        await supabase.from('checklist_responses').update({ status: null }).eq('id', resp.id)
+        setResponses(r => ({ ...r, [itemId]: { ...r[itemId], status: null } }))
+      }
+      setPunches(p => { const n = { ...p }; delete n[itemId]; return n })
+      setPunchPhotos(ph => { const n = { ...ph }; delete n[punch.id]; return n })
+      setPendingPick(p => { const n = { ...p }; delete n[itemId]; return n })
+      setExpandedItem(null)
+    } catch (err) {
+      alert('Error deleting punch: ' + err.message)
+    } finally {
+      setSaving(s => ({ ...s, [itemId]: false }))
+    }
   }
 
   async function removePunchPhoto(photo, itemId) {
@@ -593,8 +605,9 @@ export default function Checklist() {
                           Done
                         </button>
                         <button onClick={() => deletePunch(item.id)}
-                          className="flex items-center gap-1 px-4 py-2 rounded-xl text-sm font-semibold text-red-600 border-2 border-red-200 hover:bg-red-50">
-                          <Trash2 size={14} /> Delete Punch
+                          disabled={isSaving || !punch}
+                          className="flex items-center gap-1 px-4 py-2 rounded-xl text-sm font-semibold text-red-600 border-2 border-red-200 hover:bg-red-50 disabled:opacity-40 disabled:pointer-events-none">
+                          {isSaving ? <Loader2 size={14} className="animate-spin" /> : <Trash2 size={14} />} Delete Punch
                         </button>
                       </div>
                     </div>
