@@ -122,13 +122,15 @@ export default function Checklist() {
   async function handleStatus(item, status) {
     const sys = systems[activeSystemIdx]
     setSaving(s => ({ ...s, [item.id]: true }))
+    try {
     const existing = responses[item.id]
 
     if (existing) {
-      const { data } = await supabase
+      const { data, error } = await supabase
         .from('checklist_responses')
         .update({ status, updated_at: new Date().toISOString(), updated_by: profile?.id })
         .eq('id', existing.id).select().single()
+      if (error) { console.error('update error', error); return }
       setResponses(r => ({ ...r, [item.id]: data }))
 
       if (status === 'ok' && punches[item.id]) {
@@ -141,10 +143,11 @@ export default function Checklist() {
         if (!punches[item.id]) await createPunch(item, sys, data.id)
       }
     } else {
-      const { data } = await supabase
+      const { data, error } = await supabase
         .from('checklist_responses')
         .insert({ site_id: selectedSiteId, system_id: sys.id, item_id: item.id, status, updated_by: profile?.id })
         .select().single()
+      if (error) { console.error('insert error', error); return }
       setResponses(r => ({ ...r, [item.id]: data }))
       if (status === 'punch') {
         setExpandedItem(item.id)
@@ -153,7 +156,11 @@ export default function Checklist() {
     }
     // Always auto-open panel
     setExpandedItem(item.id)
-    setSaving(s => ({ ...s, [item.id]: false }))
+    } catch (err) {
+      console.error('handleStatus error', err)
+    } finally {
+      setSaving(s => ({ ...s, [item.id]: false }))
+    }
   }
 
   async function createPunch(item, sys, responseId) {
