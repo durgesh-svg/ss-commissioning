@@ -120,31 +120,37 @@ export default function Checklist() {
     setLoading(false)
   }
 
-  // Just open the panel — actual save happens on Done
+  // For OK: open panel, save only on Done
+  // For Punch: save immediately (punch record needed for photos), then mark pending-done
   function handlePick(item, status) {
     const existing = responses[item.id]
     if (existing?.status === status) {
-      // Already saved as this status — just toggle panel
       setExpandedItem(expandedItem === item.id ? null : item.id)
       return
     }
-    setPendingPick(p => ({ ...p, [item.id]: status }))
-    setExpandedItem(item.id)
+    if (status === 'ok') {
+      setPendingPick(p => ({ ...p, [item.id]: 'ok' }))
+      setExpandedItem(item.id)
+    } else {
+      saveImmediately(item, 'punch') // creates response + punch record right away
+    }
   }
 
-  // Called when Done is pressed — saves to DB
-  async function saveStatus(item, status) {
+  // Saves to DB immediately, marks item as pending-done (faded color until Done pressed)
+  async function saveImmediately(item, status) {
     const sys = systems[activeSystemIdx]
-    if (!sys || !selectedSiteId) { alert('No site/system selected'); return }
+    if (!sys || !selectedSiteId) return
     setSaving(s => ({ ...s, [item.id]: true }))
     try {
       const existing = responses[item.id]
+      let respData
       if (existing) {
         const { data, error } = await supabase
           .from('checklist_responses')
           .update({ status, updated_at: new Date().toISOString(), updated_by: profile?.id })
           .eq('id', existing.id).select().single()
         if (error) { alert('Save failed: ' + error.message); return }
+        respData = data
         setResponses(r => ({ ...r, [item.id]: data }))
         if (status === 'ok' && punches[item.id]) {
           await supabase.from('punch_points').delete().eq('id', punches[item.id].id)
@@ -158,8 +164,40 @@ export default function Checklist() {
           .insert({ site_id: selectedSiteId, system_id: sys.id, item_id: item.id, status, updated_by: profile?.id })
           .select().single()
         if (error) { alert('Save failed: ' + error.message); return }
+        respData = data
         setResponses(r => ({ ...r, [item.id]: data }))
         if (status === 'punch') await createPunch(item, sys, data.id)
+      }
+      setPendingPick(p => ({ ...p, [item.id]: status })) // faded until Done
+      setExpandedItem(item.id)
+    } catch (err) {
+      alert('Error: ' + err.message)
+    } finally {
+      setSaving(s => ({ ...s, [item.id]: false }))
+    }
+  }
+
+  // Called when Done is pressed — saves OK to DB (punch already saved), clears pending
+  async function saveStatus(item, status) {
+    const sys = systems[activeSystemIdx]
+    if (!sys || !selectedSiteId) { alert('No site/system selected'); return }
+    setSaving(s => ({ ...s, [item.id]: true }))
+    try {
+      const existing = responses[item.id]
+      if (existing) {
+        const { data, error } = await supabase
+          .from('checklist_responses')
+          .update({ status, updated_at: new Date().toISOString(), updated_by: profile?.id })
+          .eq('id', existing.id).select().single()
+        if (error) { alert('Save failed: ' + error.message); return }
+        setResponses(r => ({ ...r, [item.id]: data }))
+      } else {
+        const { data, error } = await supabase
+          .from('checklist_responses')
+          .insert({ site_id: selectedSiteId, system_id: sys.id, item_id: item.id, status, updated_by: profile?.id })
+          .select().single()
+        if (error) { alert('Save failed: ' + error.message); return }
+        setResponses(r => ({ ...r, [item.id]: data }))
       }
       setPendingPick(p => { const n = { ...p }; delete n[item.id]; return n })
     } catch (err) {
@@ -250,7 +288,10 @@ export default function Checklist() {
       return
     }
     setPhotoErrors(e => ({ ...e, [item.id]: false }))
-    await saveStatus(item, status)
+    // Punch was already saved on click — just clear pending + close
+    // OK was not saved yet — save now
+    if (status === 'ok') await saveStatus(item, status)
+    else setPendingPick(p => { const n = { ...p }; delete n[item.id]; return n })
     setExpandedItem(null)
   }
 
@@ -477,7 +518,7 @@ export default function Checklist() {
                           {['Critical', 'Minor'].map(p => (
                             <button key={p} onClick={() => updatePunch(item.id, { priority: p })}
                               className={`px-4 py-1.5 rounded-lg text-sm font-semibold border-2 transition-all ${
-                                punch.priority === p
+                                punch?.priority === p
                                   ? p === 'Critical' ? 'bg-red-600 border-red-600 text-white' : 'bg-yellow-500 border-yellow-500 text-white'
                                   : 'border-gray-300 text-gray-500'}`}>{p}</button>
                           ))}
@@ -486,20 +527,20 @@ export default function Checklist() {
 
                       <div>
                         <label className="block text-xs font-semibold text-gray-600 mb-1">Contractor</label>
-                        <input type="text" defaultValue={punch.contractor || ''}
+                        <input type="text" defaultValue={punch?.contractor || ''}
                           placeholder="Contractor name"
                           onBlur={e => updatePunch(item.id, { contractor: e.target.value })} />
                       </div>
 
                       <div>
                         <label className="block text-xs font-semibold text-gray-600 mb-1">Target Closure Date</label>
-                        <input type="date" defaultValue={punch.target_date || ''}
+                        <input type="date" defaultValue={punch?.target_date || ''}
                           onBlur={e => updatePunch(item.id, { target_date: e.target.value || null })} />
                       </div>
 
                       <div>
                         <label className="block text-xs font-semibold text-gray-600 mb-1">Remarks</label>
-                        <textarea rows={2} defaultValue={punch.remarks || ''} placeholder="Add remarks…"
+                        <textarea rows={2} defaultValue={punch?.remarks || ''} placeholder="Add remarks…"
                           onBlur={e => updatePunch(item.id, { remarks: e.target.value })} className="resize-none" />
                       </div>
 
