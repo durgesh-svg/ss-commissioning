@@ -135,12 +135,14 @@ create policy "responses_insert" on checklist_responses for insert to authentica
 create policy "responses_update" on checklist_responses for update to authenticated
   using (is_admin() or site_id = my_site_id());
 
--- Punch points: site managers see/edit their site; admins see all and can close
+-- Punch points: site managers see/edit/delete their site; admins see all
 create policy "punches_read" on punch_points for select to authenticated
   using (is_admin() or site_id = my_site_id());
 create policy "punches_insert" on punch_points for insert to authenticated
   with check (is_admin() or site_id = my_site_id());
 create policy "punches_update" on punch_points for update to authenticated
+  using (is_admin() or site_id = my_site_id());
+create policy "punches_delete" on punch_points for delete to authenticated
   using (is_admin() or site_id = my_site_id());
 
 -- Punch photos: follow punch point access
@@ -155,6 +157,15 @@ create policy "photos_read" on punch_photos for select to authenticated
   );
 create policy "photos_insert" on punch_photos for insert to authenticated
   with check (
+    is_admin() or
+    exists (
+      select 1 from punch_points pp
+      where pp.id = punch_photos.punch_id
+        and pp.site_id = my_site_id()
+    )
+  );
+create policy "photos_delete" on punch_photos for delete to authenticated
+  using (
     is_admin() or
     exists (
       select 1 from punch_points pp
