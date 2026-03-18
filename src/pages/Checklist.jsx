@@ -33,6 +33,7 @@ export default function Checklist() {
   const [respPhotos, setRespPhotos]     = useState({})
   const [contractorMap, setContractorMap] = useState({}) // system_id → contractor_name
   const [expandedItem, setExpandedItem] = useState(null)
+  const [pendingPick, setPendingPick]   = useState({}) // item_id → 'ok'|'punch' (not yet saved)
   const [saving, setSaving]             = useState({})
   const [loading, setLoading]           = useState(true)
   const [photoConfirmed, setPhotoConfirmed] = useState({})
@@ -119,10 +120,22 @@ export default function Checklist() {
     setLoading(false)
   }
 
-  async function handleStatus(item, status) {
+  // Just open the panel — actual save happens on Done
+  function handlePick(item, status) {
+    const existing = responses[item.id]
+    if (existing?.status === status) {
+      // Already saved as this status — just toggle panel
+      setExpandedItem(expandedItem === item.id ? null : item.id)
+      return
+    }
+    setPendingPick(p => ({ ...p, [item.id]: status }))
+    setExpandedItem(item.id)
+  }
+
+  // Called when Done is pressed — saves to DB
+  async function saveStatus(item, status) {
     const sys = systems[activeSystemIdx]
-    if (!sys) { alert('No system selected'); return }
-    if (!selectedSiteId) { alert('No site selected'); return }
+    if (!sys || !selectedSiteId) { alert('No site/system selected'); return }
     setSaving(s => ({ ...s, [item.id]: true }))
     try {
       const existing = responses[item.id]
@@ -148,7 +161,7 @@ export default function Checklist() {
         setResponses(r => ({ ...r, [item.id]: data }))
         if (status === 'punch') await createPunch(item, sys, data.id)
       }
-      setExpandedItem(item.id)
+      setPendingPick(p => { const n = { ...p }; delete n[item.id]; return n })
     } catch (err) {
       alert('Error: ' + err.message)
     } finally {
@@ -231,13 +244,14 @@ export default function Checklist() {
     e.target.value = ''
   }
 
-  function handleDone(itemId, photos) {
+  async function handleDone(item, photos, status) {
     if (!photos || photos.length === 0) {
-      setPhotoErrors(e => ({ ...e, [itemId]: true }))
+      setPhotoErrors(e => ({ ...e, [item.id]: true }))
       return
     }
+    setPhotoErrors(e => ({ ...e, [item.id]: false }))
+    await saveStatus(item, status)
     setExpandedItem(null)
-    setPhotoErrors(e => ({ ...e, [itemId]: false }))
   }
 
   async function deleteOkResponse(itemId) {
@@ -338,8 +352,12 @@ export default function Checklist() {
               const punch = punches[item.id]
               const pphotos = punchPhotos[punch?.id] || []
               const rphotos = respPhotos[resp?.id] || []
-              const isPunch = resp?.status === 'punch'
-              const isOk = resp?.status === 'ok'
+              const savedStatus = resp?.status
+              const pending = pendingPick[item.id]
+              const isPunch = savedStatus === 'punch'
+              const isOk = savedStatus === 'ok'
+              const isPendingOk = !savedStatus && pending === 'ok'
+              const isPendingPunch = !savedStatus && pending === 'punch'
               const isExpanded = expandedItem === item.id
               const isSaving = saving[item.id]
               const hasPhotoError = photoErrors[item.id]
@@ -368,16 +386,11 @@ export default function Checklist() {
                       </div>
                       <div className="flex items-center gap-1.5 shrink-0">
                         {isSaving && <Loader2 size={14} className="animate-spin text-gray-400" />}
-                        <button onClick={() => handleStatus(item, 'ok')} disabled={isSaving}
-                          className={`btn-ok ${isOk ? 'active' : ''}`}>OK</button>
-                        <button
-                          onClick={() => {
-                            if (isPunch) { setExpandedItem(isExpanded ? null : item.id) }
-                            else handleStatus(item, 'punch')
-                          }}
-                          disabled={isSaving}
-                          className={`btn-punch ${isPunch ? 'active' : ''}`}>Punch</button>
-                        {(isOk || isPunch) && (
+                        <button onClick={() => handlePick(item, 'ok')} disabled={isSaving}
+                          className={`btn-ok ${isOk ? 'active' : isPendingOk ? 'opacity-50 active' : ''}`}>OK</button>
+                        <button onClick={() => handlePick(item, 'punch')} disabled={isSaving}
+                          className={`btn-punch ${isPunch ? 'active' : isPendingPunch ? 'opacity-50 active' : ''}`}>Punch</button>
+                        {(isOk || isPunch || isPendingOk || isPendingPunch) && (
                           <button onClick={() => setExpandedItem(isExpanded ? null : item.id)} className="text-gray-400">
                             {isExpanded ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
                           </button>
@@ -387,13 +400,13 @@ export default function Checklist() {
                   </div>
 
                   {/* OK expanded panel */}
-                  {isExpanded && isOk && (
+                  {isExpanded && (isOk || isPendingOk) && (
                     <div className="bg-green-50 border-t border-green-100 px-4 py-4 space-y-3">
                       <div className="flex items-center justify-between">
                         <p className="text-xs font-semibold text-green-700 flex items-center gap-1">
                           <ImagePlus size={13} /> Photos &amp; Notes
                         </p>
-                        <button onClick={() => handleDone(item.id, rphotos)}
+                        <button onClick={() => handleDone(item, rphotos, 'ok')}
                           className="text-xs font-semibold text-gray-500 border border-gray-300 rounded-lg px-3 py-1">Done</button>
                       </div>
 
@@ -439,7 +452,7 @@ export default function Checklist() {
                       </div>
 
                       <div className="flex gap-2 pt-1">
-                        <button onClick={() => handleDone(item.id, rphotos)}
+                        <button onClick={() => handleDone(item, rphotos, 'ok')}
                           className="flex-1 py-2 rounded-xl text-sm font-semibold text-white bg-green-600">Done</button>
                         <button onClick={() => deleteOkResponse(item.id)}
                           className="flex items-center gap-1 px-4 py-2 rounded-xl text-sm font-semibold text-red-600 border-2 border-red-200 hover:bg-red-50">
@@ -449,19 +462,12 @@ export default function Checklist() {
                     </div>
                   )}
 
-                  {/* Punch loading state — punch record being created */}
-                  {isExpanded && isPunch && !punch && (
-                    <div className="bg-orange-50 border-t border-orange-100 px-4 py-4 flex items-center gap-2 text-orange-600 text-sm">
-                      <Loader2 size={16} className="animate-spin" /> Setting up punch…
-                    </div>
-                  )}
-
                   {/* Punch expanded panel */}
-                  {isExpanded && isPunch && punch && (
+                  {isExpanded && (isPunch || isPendingPunch) && (
                     <div className="bg-orange-50 border-t border-orange-100 px-4 py-4 space-y-3">
                       <div className="flex items-center justify-between">
                         <p className="text-xs font-semibold text-orange-700">Punch Details</p>
-                        <button onClick={() => handleDone(item.id, pphotos)}
+                        <button onClick={() => handleDone(item, pphotos, 'punch')}
                           className="text-xs font-semibold text-gray-500 border border-gray-300 rounded-lg px-3 py-1">Done</button>
                       </div>
 
@@ -539,7 +545,7 @@ export default function Checklist() {
                       </div>
 
                       <div className="flex gap-2 pt-1">
-                        <button onClick={() => handleDone(item.id, pphotos)}
+                        <button onClick={() => handleDone(item, pphotos, 'punch')}
                           className="flex-1 py-2 rounded-xl text-sm font-semibold text-white" style={{ background: '#d85a30' }}>
                           Done
                         </button>
