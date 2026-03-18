@@ -461,8 +461,8 @@ export default function Checklist() {
                         <p className="text-xs font-semibold text-green-700 flex items-center gap-1">
                           <ImagePlus size={13} /> Photos &amp; Notes
                         </p>
-                        <button onClick={() => handleDone(item, rphotos, 'ok')}
-                          className="text-xs font-semibold text-gray-500 border border-gray-300 rounded-lg px-3 py-1">Done</button>
+                        <button onClick={() => setExpandedItem(null)}
+                          className="text-xs font-semibold text-gray-500 border border-gray-300 rounded-lg px-3 py-1">✕ Close</button>
                       </div>
 
                       <div>
@@ -522,8 +522,8 @@ export default function Checklist() {
                     <div className="bg-orange-50 border-t border-orange-100 px-4 py-4 space-y-3">
                       <div className="flex items-center justify-between">
                         <p className="text-xs font-semibold text-orange-700">Punch Details</p>
-                        <button onClick={() => handleDone(item, pphotos, 'punch')}
-                          className="text-xs font-semibold text-gray-500 border border-gray-300 rounded-lg px-3 py-1">Done</button>
+                        <button onClick={() => setExpandedItem(null)}
+                          className="text-xs font-semibold text-gray-500 border border-gray-300 rounded-lg px-3 py-1">✕ Close</button>
                       </div>
 
                       <div>
