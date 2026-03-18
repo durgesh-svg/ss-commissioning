@@ -4,13 +4,24 @@ import { supabase } from '../lib/supabase'
 import { useAuth } from '../contexts/AuthContext'
 import {
   ChevronDown, ChevronUp, Loader2, CheckCircle2,
-  AlertCircle, Clock, MessageSquare, Download, Send
+  AlertCircle, MessageSquare, Download, Send, X, ZoomIn
 } from 'lucide-react'
 
 const STATUS_CONFIG = {
-  open:        { label: 'Open',        color: 'bg-orange-100 text-orange-700' },
-  in_progress: { label: 'In Progress', color: 'bg-blue-100 text-blue-700' },
-  closed:      { label: 'Closed',      color: 'bg-green-100 text-green-700' },
+  open:            { label: 'Open',             color: 'bg-orange-100 text-orange-700' },
+  in_progress:     { label: 'In Progress',      color: 'bg-blue-100 text-blue-700' },
+  pending_closure: { label: 'Pending Approval', color: 'bg-purple-100 text-purple-700' },
+  closed:          { label: 'Closed',           color: 'bg-green-100 text-green-700' },
+}
+
+function PhotoModal({ url, onClose }) {
+  if (!url) return null
+  return (
+    <div className="fixed inset-0 z-50 bg-black/80 flex items-center justify-center p-4" onClick={onClose}>
+      <button onClick={onClose} className="absolute top-4 right-4 bg-white/20 rounded-full p-2 text-white"><X size={20} /></button>
+      <img src={url} alt="punch photo" className="max-w-full max-h-full rounded-xl object-contain" onClick={e => e.stopPropagation()} />
+    </div>
+  )
 }
 
 function isOverdue(punch) {
@@ -27,8 +38,9 @@ export default function PunchList() {
   const [loading, setLoading] = useState(true)
   const [expanded, setExpanded] = useState(null)
   const [updating, setUpdating] = useState({})
-  const [newComment, setNewComment] = useState({}) // punch_id → text
+  const [newComment, setNewComment] = useState({})
   const [submitting, setSubmitting] = useState({})
+  const [lightboxUrl, setLightboxUrl] = useState(null)
 
   // Filters
   const [filterSite, setFilterSite] = useState('')
@@ -116,9 +128,7 @@ export default function PunchList() {
     if (filterSite && p.site_id !== filterSite) return false
     if (filterSystem && p.system_id !== filterSystem) return false
     if (filterPriority && p.priority !== filterPriority) return false
-    if (filterStatus === 'open' && p.status === 'closed') return false
-    if (filterStatus === 'closed' && p.status !== 'closed') return false
-    if (filterStatus === 'in_progress' && p.status !== 'in_progress') return false
+    if (filterStatus && p.status !== filterStatus) return false
     return true
   })
 
@@ -126,6 +136,7 @@ export default function PunchList() {
 
   return (
     <div className="flex flex-col h-full">
+      <PhotoModal url={lightboxUrl} onClose={() => setLightboxUrl(null)} />
       {/* Filters + Export */}
       <div className="bg-white border-b border-gray-100 px-3 py-3 space-y-2">
         <div className="grid grid-cols-2 gap-2">
@@ -148,6 +159,7 @@ export default function PunchList() {
             <option value="">All Status</option>
             <option value="open">Open</option>
             <option value="in_progress">In Progress</option>
+            <option value="pending_closure">Pending Approval</option>
             <option value="closed">Closed</option>
           </select>
         </div>
@@ -255,20 +267,18 @@ export default function PunchList() {
                       {profile?.is_admin && (
                         <div>
                           <p className="text-xs font-semibold text-gray-500 mb-2">Update Status</p>
-                          <div className="flex gap-2">
-                            {['open', 'in_progress', 'closed'].map(s => (
-                              <button
-                                key={s}
-                                disabled={updating[punch.id] || punch.status === s}
+                          <div className="flex flex-wrap gap-1.5">
+                            {['open', 'in_progress', 'pending_closure', 'closed'].map(s => (
+                              <button key={s} disabled={updating[punch.id] || punch.status === s}
                                 onClick={() => updateStatus(punch, s)}
-                                className={`flex-1 py-1.5 rounded-lg text-xs font-semibold border-2 transition-all disabled:opacity-50 ${
+                                className={`flex-1 py-1.5 rounded-lg text-xs font-semibold border-2 transition-all disabled:opacity-50 min-w-[60px] ${
                                   punch.status === s
                                     ? s === 'closed' ? 'bg-green-600 border-green-600 text-white'
                                       : s === 'in_progress' ? 'bg-blue-600 border-blue-600 text-white'
+                                      : s === 'pending_closure' ? 'bg-purple-600 border-purple-600 text-white'
                                       : 'bg-orange-500 border-orange-500 text-white'
                                     : 'border-gray-200 text-gray-500 bg-white'
-                                }`}
-                              >
+                                }`}>
                                 {updating[punch.id] ? <Loader2 size={12} className="animate-spin mx-auto" /> : STATUS_CONFIG[s].label}
                               </button>
                             ))}
@@ -276,28 +286,27 @@ export default function PunchList() {
                         </div>
                       )}
 
-                      {/* Site manager: status progression */}
-                      {!profile?.is_admin && punch.status !== 'closed' && (
+                      {/* Site manager: two-step closure */}
+                      {!profile?.is_admin && punch.status !== 'closed' && punch.status !== 'pending_closure' && (
                         <div className="flex gap-2">
                           {punch.status === 'open' && (
-                            <button
-                              onClick={() => updateStatus(punch, 'in_progress')}
-                              disabled={updating[punch.id]}
-                              className="flex-1 py-2 rounded-lg text-sm font-semibold border-2 border-blue-400 text-blue-600 hover:bg-blue-50 transition-colors"
-                            >
+                            <button onClick={() => updateStatus(punch, 'in_progress')} disabled={updating[punch.id]}
+                              className="flex-1 py-2 rounded-lg text-sm font-semibold border-2 border-blue-400 text-blue-600 hover:bg-blue-50">
                               {updating[punch.id] ? 'Updating…' : 'Mark In Progress'}
                             </button>
                           )}
                           {punch.status === 'in_progress' && (
-                            <button
-                              onClick={() => updateStatus(punch, 'closed')}
-                              disabled={updating[punch.id]}
-                              className="flex-1 py-2 rounded-lg text-sm font-semibold border-2 border-green-500 text-green-700 hover:bg-green-50 transition-colors"
-                            >
-                              {updating[punch.id] ? 'Updating…' : 'Mark Closed'}
+                            <button onClick={() => updateStatus(punch, 'pending_closure')} disabled={updating[punch.id]}
+                              className="flex-1 py-2 rounded-lg text-sm font-semibold border-2 border-purple-400 text-purple-700 hover:bg-purple-50">
+                              {updating[punch.id] ? 'Updating…' : 'Request Closure'}
                             </button>
                           )}
                         </div>
+                      )}
+                      {!profile?.is_admin && punch.status === 'pending_closure' && (
+                        <p className="text-xs text-center text-purple-600 font-semibold py-2 bg-purple-50 rounded-lg">
+                          ⏳ Awaiting admin approval to close
+                        </p>
                       )}
 
                       {/* Photos */}
@@ -306,9 +315,12 @@ export default function PunchList() {
                           <p className="text-xs font-semibold text-gray-500 mb-2">Photos</p>
                           <div className="flex flex-wrap gap-2">
                             {punch.punch_photos.map(photo => (
-                              <a key={photo.id} href={photo.url} target="_blank" rel="noreferrer">
+                              <div key={photo.id} className="relative w-20 h-20 cursor-pointer" onClick={() => setLightboxUrl(photo.url)}>
                                 <img src={photo.url} alt="punch" className="w-20 h-20 object-cover rounded-lg border border-gray-200" />
-                              </a>
+                                <div className="absolute inset-0 flex items-center justify-center bg-black/0 hover:bg-black/20 rounded-lg transition-colors">
+                                  <ZoomIn size={16} className="text-white opacity-0 hover:opacity-100" />
+                                </div>
+                              </div>
                             ))}
                           </div>
                         </div>

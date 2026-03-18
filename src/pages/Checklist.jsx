@@ -2,28 +2,45 @@ import { useEffect, useRef, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../contexts/AuthContext'
-import { Camera, X, Loader2, ChevronDown, ChevronUp, ImagePlus, StickyNote, CheckCircle2, Trash2 } from 'lucide-react'
+import {
+  Camera, X, Loader2, ChevronDown, ChevronUp,
+  ImagePlus, StickyNote, CheckCircle2, Trash2, ZoomIn
+} from 'lucide-react'
+
+/* ── inline photo lightbox ── */
+function PhotoModal({ url, onClose }) {
+  if (!url) return null
+  return (
+    <div className="fixed inset-0 z-50 bg-black/80 flex items-center justify-center p-4" onClick={onClose}>
+      <button onClick={onClose} className="absolute top-4 right-4 bg-white/20 rounded-full p-2 text-white"><X size={20} /></button>
+      <img src={url} alt="photo" className="max-w-full max-h-full rounded-xl object-contain" onClick={e => e.stopPropagation()} />
+    </div>
+  )
+}
 
 export default function Checklist() {
-  const { profile } = useAuth()
+  const { profile, userSites } = useAuth()
   const [searchParams] = useSearchParams()
 
-  const [sites, setSites] = useState([])
+  const [sites, setSites]               = useState([])
   const [selectedSiteId, setSelectedSiteId] = useState(null)
-  const [systems, setSystems] = useState([])
+  const [systems, setSystems]           = useState([])
   const [activeSystemIdx, setActiveSystemIdx] = useState(0)
-  const [items, setItems] = useState([])
-  const [responses, setResponses] = useState({})   // item_id → response row
-  const [punches, setPunches] = useState({})        // item_id → punch_point row
-  const [punchPhotos, setPunchPhotos] = useState({}) // punch_id → [photo]
-  const [respPhotos, setRespPhotos] = useState({})   // response_id → [photo]
+  const [items, setItems]               = useState([])
+  const [responses, setResponses]       = useState({})
+  const [punches, setPunches]           = useState({})
+  const [punchPhotos, setPunchPhotos]   = useState({})
+  const [respPhotos, setRespPhotos]     = useState({})
+  const [contractorMap, setContractorMap] = useState({}) // system_id → contractor_name
   const [expandedItem, setExpandedItem] = useState(null)
-  const [saving, setSaving] = useState({})
-  const [loading, setLoading] = useState(true)
-  const [photoConfirmed, setPhotoConfirmed] = useState({}) // item_id → bool
-  const [uploadingPhoto, setUploadingPhoto] = useState({}) // item_id → bool
+  const [saving, setSaving]             = useState({})
+  const [loading, setLoading]           = useState(true)
+  const [photoConfirmed, setPhotoConfirmed] = useState({})
+  const [uploadingPhoto, setUploadingPhoto] = useState({})
+  const [lightboxUrl, setLightboxUrl]   = useState(null)
+  const [photoErrors, setPhotoErrors]   = useState({}) // item_id → bool
 
-  useEffect(() => { loadStaticData() }, [])
+  useEffect(() => { loadStaticData() }, [userSites])
 
   async function loadStaticData() {
     const [sitesRes, systemsRes] = await Promise.all([
@@ -32,11 +49,13 @@ export default function Checklist() {
     ])
     setSites(sitesRes.data || [])
     setSystems(systemsRes.data || [])
+
     const paramSite = searchParams.get('site')
     if (profile?.is_admin) {
-      setSelectedSiteId(paramSite || (sitesRes.data?.[0]?.id ?? null))
+      setSelectedSiteId(paramSite || sitesRes.data?.[0]?.id || null)
     } else {
-      setSelectedSiteId(profile?.site_id ?? null)
+      // Use first assigned site, or fallback to profile.site_id
+      setSelectedSiteId(paramSite || userSites[0]?.id || profile?.site_id || null)
     }
   }
 
@@ -49,9 +68,10 @@ export default function Checklist() {
     const sys = systems[activeSystemIdx]
     if (!sys) return
 
-    const [itemsRes, responsesRes] = await Promise.all([
+    const [itemsRes, responsesRes, contractorRes] = await Promise.all([
       supabase.from('checklist_items').select('*').eq('system_id', sys.id).order('item_number'),
       supabase.from('checklist_responses').select('*').eq('site_id', selectedSiteId).eq('system_id', sys.id),
+      supabase.from('contractor_assignments').select('contractor_name').eq('site_id', selectedSiteId).eq('system_id', sys.id).maybeSingle(),
     ])
 
     const itemList = itemsRes.data || []
@@ -61,11 +81,13 @@ export default function Checklist() {
     for (const r of responsesRes.data || []) respMap[r.item_id] = r
     setResponses(respMap)
 
+    // Contractor pre-fill
+    setContractorMap(prev => ({ ...prev, [sys.id]: contractorRes.data?.contractor_name || '' }))
+
     // Load punch points
     const punchItemIds = itemList.filter(i => respMap[i.id]?.status === 'punch').map(i => i.id)
     if (punchItemIds.length) {
-      const punchRes = await supabase
-        .from('punch_points').select('*').eq('site_id', selectedSiteId).in('item_id', punchItemIds)
+      const punchRes = await supabase.from('punch_points').select('*').eq('site_id', selectedSiteId).in('item_id', punchItemIds)
       const punchMap = {}
       for (const p of punchRes.data || []) punchMap[p.item_id] = p
       setPunches(punchMap)
@@ -79,15 +101,10 @@ export default function Checklist() {
           photoMap[ph.punch_id].push(ph)
         }
         setPunchPhotos(photoMap)
-      } else {
-        setPunchPhotos({})
-      }
-    } else {
-      setPunches({})
-      setPunchPhotos({})
-    }
+      } else { setPunchPhotos({}) }
+    } else { setPunches({}); setPunchPhotos({}) }
 
-    // Load response photos (for OK items)
+    // Load response photos
     const allRespIds = (responsesRes.data || []).map(r => r.id)
     if (allRespIds.length) {
       const rPhotoRes = await supabase.from('response_photos').select('*').in('response_id', allRespIds)
@@ -97,9 +114,7 @@ export default function Checklist() {
         rPhotoMap[ph.response_id].push(ph)
       }
       setRespPhotos(rPhotoMap)
-    } else {
-      setRespPhotos({})
-    }
+    } else { setRespPhotos({}) }
 
     setLoading(false)
   }
@@ -135,16 +150,17 @@ export default function Checklist() {
         setExpandedItem(item.id)
         await createPunch(item, sys, data.id)
       }
-      if (status === 'ok') setExpandedItem(item.id) // auto-open for photo/notes
     }
-
+    // Always auto-open panel
+    setExpandedItem(item.id)
     setSaving(s => ({ ...s, [item.id]: false }))
   }
 
   async function createPunch(item, sys, responseId) {
+    const prefillContractor = contractorMap[sys.id] || ''
     const { data } = await supabase
       .from('punch_points')
-      .insert({ response_id: responseId, site_id: selectedSiteId, system_id: sys.id, item_id: item.id })
+      .insert({ response_id: responseId, site_id: selectedSiteId, system_id: sys.id, item_id: item.id, contractor: prefillContractor })
       .select().single()
     if (data) setPunches(p => ({ ...p, [item.id]: data }))
     return data
@@ -166,10 +182,10 @@ export default function Checklist() {
 
   function showPhotoConfirm(itemId) {
     setPhotoConfirmed(c => ({ ...c, [itemId]: true }))
+    setPhotoErrors(e => ({ ...e, [itemId]: false }))
     setTimeout(() => setPhotoConfirmed(c => ({ ...c, [itemId]: false })), 2500)
   }
 
-  // Upload photo for punch items
   async function handlePunchPhotoUpload(e, itemId) {
     const punch = punches[itemId]
     if (!punch) return
@@ -192,7 +208,6 @@ export default function Checklist() {
     e.target.value = ''
   }
 
-  // Upload photo for OK items (stored in response_photos)
   async function handleRespPhotoUpload(e, itemId) {
     const resp = responses[itemId]
     if (!resp) return
@@ -215,14 +230,21 @@ export default function Checklist() {
     e.target.value = ''
   }
 
+  function handleDone(itemId, photos) {
+    if (!photos || photos.length === 0) {
+      setPhotoErrors(e => ({ ...e, [itemId]: true }))
+      return
+    }
+    setExpandedItem(null)
+    setPhotoErrors(e => ({ ...e, [itemId]: false }))
+  }
+
   async function deleteOkResponse(itemId) {
     const resp = responses[itemId]
     if (!resp) return
     if (!window.confirm('Delete photos/notes and reset this item to blank?')) return
     const photos = respPhotos[resp.id] || []
-    for (const ph of photos) {
-      await supabase.storage.from('punch-photos').remove([ph.storage_path])
-    }
+    for (const ph of photos) await supabase.storage.from('punch-photos').remove([ph.storage_path])
     await supabase.from('response_photos').delete().eq('response_id', resp.id)
     await supabase.from('checklist_responses').update({ status: null, notes: null }).eq('id', resp.id)
     setResponses(r => ({ ...r, [itemId]: { ...r[itemId], status: null, notes: null } }))
@@ -235,11 +257,8 @@ export default function Checklist() {
     const resp = responses[itemId]
     if (!punch) return
     if (!window.confirm('Delete this punch point and reset to blank?')) return
-    // Delete all photos from storage
     const photos = punchPhotos[punch.id] || []
-    for (const ph of photos) {
-      await supabase.storage.from('punch-photos').remove([ph.storage_path])
-    }
+    for (const ph of photos) await supabase.storage.from('punch-photos').remove([ph.storage_path])
     await supabase.from('punch_photos').delete().eq('punch_id', punch.id)
     await supabase.from('punch_points').delete().eq('id', punch.id)
     if (resp) {
@@ -265,36 +284,40 @@ export default function Checklist() {
     setRespPhotos(rp => ({ ...rp, [respId]: (rp[respId] || []).filter(p => p.id !== photo.id) }))
   }
 
-  if (!selectedSiteId && !profile?.is_admin) {
+  // Selectable sites: admin sees all, site manager sees assigned
+  const selectableSites = profile?.is_admin ? sites : userSites
+
+  if (!selectedSiteId && !profile?.is_admin && userSites.length === 0) {
     return <div className="p-6 text-center text-gray-500">No site assigned. Contact admin.</div>
   }
 
   return (
     <div className="flex flex-col h-full">
-      {profile?.is_admin && (
-        <div className="bg-white border-b border-gray-100 px-4 py-2">
-          <select value={selectedSiteId || ''} onChange={e => { setSelectedSiteId(e.target.value); setActiveSystemIdx(0) }} className="text-sm">
-            {sites.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
+      <PhotoModal url={lightboxUrl} onClose={() => setLightboxUrl(null)} />
+
+      {/* Site selector */}
+      <div className="bg-white border-b border-gray-100 px-4 py-2">
+        {selectableSites.length > 1 ? (
+          <select
+            value={selectedSiteId || ''}
+            onChange={e => { setSelectedSiteId(e.target.value); setActiveSystemIdx(0) }}
+            className="text-sm font-medium w-full"
+          >
+            {selectableSites.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
           </select>
-        </div>
-      )}
-      {!profile?.is_admin && (
-        <div className="bg-white border-b border-gray-100 px-4 py-2">
-          <p className="text-sm font-medium text-gray-700">{profile?.sites?.name}</p>
-        </div>
-      )}
+        ) : (
+          <p className="text-sm font-medium text-gray-700">{selectableSites[0]?.name || '—'}</p>
+        )}
+      </div>
 
       {/* System tabs */}
       <div className="bg-white border-b border-gray-100 overflow-x-auto">
         <div className="flex min-w-max">
           {systems.map((s, idx) => (
-            <button
-              key={s.id}
-              onClick={() => { setActiveSystemIdx(idx); setExpandedItem(null) }}
+            <button key={s.id} onClick={() => { setActiveSystemIdx(idx); setExpandedItem(null) }}
               className={`relative px-4 py-3 text-xs font-semibold whitespace-nowrap border-b-2 transition-colors ${
-                activeSystemIdx === idx ? 'border-orange-500 text-orange-600' : 'border-transparent text-gray-500 hover:text-gray-700'
-              }`}
-            >
+                activeSystemIdx === idx ? 'border-orange-500 text-orange-600' : 'border-transparent text-gray-500'
+              }`}>
               {s.name}
             </button>
           ))}
@@ -318,7 +341,7 @@ export default function Checklist() {
               const isOk = resp?.status === 'ok'
               const isExpanded = expandedItem === item.id
               const isSaving = saving[item.id]
-              const hasMedia = pphotos.length > 0 || rphotos.length > 0 || resp?.notes
+              const hasPhotoError = photoErrors[item.id]
 
               return (
                 <div key={item.id} className="bg-white">
@@ -327,7 +350,6 @@ export default function Checklist() {
                       <span className="text-xs text-gray-400 mt-0.5 w-5 shrink-0">{item.item_number}</span>
                       <div className="flex-1 min-w-0">
                         <p className="text-sm text-gray-800 leading-snug">{item.description}</p>
-                        {/* Media indicator */}
                         {!isExpanded && (rphotos.length > 0 || pphotos.length > 0 || resp?.notes) && (
                           <div className="flex items-center gap-2 mt-1.5 flex-wrap">
                             {(rphotos.length > 0 || pphotos.length > 0) && (
@@ -349,22 +371,13 @@ export default function Checklist() {
                           className={`btn-ok ${isOk ? 'active' : ''}`}>OK</button>
                         <button
                           onClick={() => {
-                            handleStatus(item, 'punch')
-                            if (isPunch) setExpandedItem(isExpanded ? null : item.id)
+                            if (isPunch) { setExpandedItem(isExpanded ? null : item.id) }
+                            else handleStatus(item, 'punch')
                           }}
                           disabled={isSaving}
                           className={`btn-punch ${isPunch ? 'active' : ''}`}>Punch</button>
-                        {/* Expand button for OK items — same chevron as Punch */}
-                        {isOk && (
-                          <button
-                            onClick={() => setExpandedItem(isExpanded ? null : item.id)}
-                            className="text-gray-400 hover:text-gray-600"
-                          >
-                            {isExpanded ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
-                          </button>
-                        )}
-                        {isPunch && (
-                          <button onClick={() => setExpandedItem(isExpanded ? null : item.id)} className="text-gray-400 hover:text-gray-600">
+                        {(isOk || isPunch) && (
+                          <button onClick={() => setExpandedItem(isExpanded ? null : item.id)} className="text-gray-400">
                             {isExpanded ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
                           </button>
                         )}
@@ -372,40 +385,41 @@ export default function Checklist() {
                     </div>
                   </div>
 
-                  {/* OK expanded panel — photos + notes */}
+                  {/* OK expanded panel */}
                   {isExpanded && isOk && (
                     <div className="bg-green-50 border-t border-green-100 px-4 py-4 space-y-3">
                       <div className="flex items-center justify-between">
                         <p className="text-xs font-semibold text-green-700 flex items-center gap-1">
                           <ImagePlus size={13} /> Photos &amp; Notes
                         </p>
-                        <button onClick={() => setExpandedItem(null)}
-                          className="text-xs font-semibold text-gray-500 border border-gray-300 rounded-lg px-3 py-1 hover:bg-white">
-                          Done
-                        </button>
+                        <button onClick={() => handleDone(item.id, rphotos)}
+                          className="text-xs font-semibold text-gray-500 border border-gray-300 rounded-lg px-3 py-1">Done</button>
                       </div>
 
-                      {/* Notes */}
                       <div>
                         <label className="block text-xs font-semibold text-gray-600 mb-1">Notes</label>
                         <textarea rows={2} defaultValue={resp?.notes || ''} placeholder="Add observation notes…"
                           onBlur={e => updateNotes(item.id, e.target.value)} className="resize-none w-full" />
                       </div>
 
-                      {/* Photos */}
                       <div>
-                        <label className="block text-xs font-semibold text-gray-600 mb-2">Photos</label>
+                        <label className="block text-xs font-semibold text-gray-600 mb-2">
+                          Photos <span className="text-red-500">*</span>
+                        </label>
                         <div className="flex flex-wrap gap-2">
                           {rphotos.map(photo => (
                             <div key={photo.id} className="relative w-20 h-20 rounded-lg overflow-hidden border border-gray-200">
-                              <img src={photo.url} alt="" className="w-full h-full object-cover" />
+                              <img src={photo.url} alt="" className="w-full h-full object-cover cursor-pointer"
+                                onClick={() => setLightboxUrl(photo.url)} />
                               <button onClick={() => removeRespPhoto(photo, item.id)}
-                                className="absolute top-0.5 right-0.5 bg-black/60 rounded-full p-0.5 text-white">
-                                <X size={10} />
-                              </button>
+                                className="absolute top-0.5 right-0.5 bg-black/60 rounded-full p-0.5 text-white"><X size={10} /></button>
+                              <button onClick={() => setLightboxUrl(photo.url)}
+                                className="absolute bottom-0.5 right-0.5 bg-black/60 rounded-full p-0.5 text-white"><ZoomIn size={10} /></button>
                             </div>
                           ))}
-                          <label className={`w-20 h-20 rounded-lg border-2 border-dashed border-green-300 flex flex-col items-center justify-center cursor-pointer hover:bg-green-50 transition-colors ${uploadingPhoto[item.id] ? 'opacity-50 pointer-events-none' : 'text-green-500'}`}>
+                          <label className={`w-20 h-20 rounded-lg border-2 border-dashed flex flex-col items-center justify-center cursor-pointer transition-colors ${
+                            uploadingPhoto[item.id] ? 'opacity-50 pointer-events-none border-green-300 text-green-500'
+                            : hasPhotoError ? 'border-red-400 text-red-500 bg-red-50' : 'border-green-300 text-green-500 hover:bg-green-50'}`}>
                             {uploadingPhoto[item.id]
                               ? <Loader2 size={20} className="animate-spin text-green-500" />
                               : <><Camera size={20} /><span className="text-xs mt-1">Add</span></>}
@@ -413,18 +427,19 @@ export default function Checklist() {
                               onChange={e => handleRespPhotoUpload(e, item.id)} />
                           </label>
                         </div>
+                        {hasPhotoError && (
+                          <p className="text-xs text-red-600 mt-1 font-semibold">⚠ At least 1 photo is required before closing</p>
+                        )}
                         {photoConfirmed[item.id] && (
-                          <div className="mt-2 flex items-center gap-1.5 text-green-600 text-xs font-semibold animate-pulse">
+                          <div className="mt-2 flex items-center gap-1.5 text-green-600 text-xs font-semibold">
                             <CheckCircle2 size={14} /> Photo saved successfully
                           </div>
                         )}
                       </div>
 
                       <div className="flex gap-2 pt-1">
-                        <button onClick={() => setExpandedItem(null)}
-                          className="flex-1 py-2 rounded-xl text-sm font-semibold text-white bg-green-600">
-                          Done
-                        </button>
+                        <button onClick={() => handleDone(item.id, rphotos)}
+                          className="flex-1 py-2 rounded-xl text-sm font-semibold text-white bg-green-600">Done</button>
                         <button onClick={() => deleteOkResponse(item.id)}
                           className="flex items-center gap-1 px-4 py-2 rounded-xl text-sm font-semibold text-red-600 border-2 border-red-200 hover:bg-red-50">
                           <Trash2 size={14} /> Delete
@@ -436,15 +451,12 @@ export default function Checklist() {
                   {/* Punch expanded panel */}
                   {isExpanded && isPunch && punch && (
                     <div className="bg-orange-50 border-t border-orange-100 px-4 py-4 space-y-3">
-                      {/* Header with Done */}
                       <div className="flex items-center justify-between">
                         <p className="text-xs font-semibold text-orange-700">Punch Details</p>
-                        <button onClick={() => setExpandedItem(null)}
-                          className="text-xs font-semibold text-gray-500 border border-gray-300 rounded-lg px-3 py-1 hover:bg-white">
-                          Done
-                        </button>
+                        <button onClick={() => handleDone(item.id, pphotos)}
+                          className="text-xs font-semibold text-gray-500 border border-gray-300 rounded-lg px-3 py-1">Done</button>
                       </div>
-                      {/* Priority */}
+
                       <div>
                         <label className="block text-xs font-semibold text-gray-600 mb-1">Priority *</label>
                         <div className="flex gap-2">
@@ -453,54 +465,54 @@ export default function Checklist() {
                               className={`px-4 py-1.5 rounded-lg text-sm font-semibold border-2 transition-all ${
                                 punch.priority === p
                                   ? p === 'Critical' ? 'bg-red-600 border-red-600 text-white' : 'bg-yellow-500 border-yellow-500 text-white'
-                                  : 'border-gray-300 text-gray-500'
-                              }`}>{p}</button>
+                                  : 'border-gray-300 text-gray-500'}`}>{p}</button>
                           ))}
                         </div>
                       </div>
 
-                      {/* Contractor */}
                       <div>
                         <label className="block text-xs font-semibold text-gray-600 mb-1">Contractor</label>
-                        <input type="text" defaultValue={punch.contractor || ''} placeholder="Contractor name"
+                        <input type="text" defaultValue={punch.contractor || ''}
+                          placeholder="Contractor name"
                           onBlur={e => updatePunch(item.id, { contractor: e.target.value })} />
                       </div>
 
-                      {/* Target date */}
                       <div>
                         <label className="block text-xs font-semibold text-gray-600 mb-1">Target Closure Date</label>
                         <input type="date" defaultValue={punch.target_date || ''}
                           onBlur={e => updatePunch(item.id, { target_date: e.target.value || null })} />
                       </div>
 
-                      {/* Remarks */}
                       <div>
                         <label className="block text-xs font-semibold text-gray-600 mb-1">Remarks</label>
                         <textarea rows={2} defaultValue={punch.remarks || ''} placeholder="Add remarks…"
                           onBlur={e => updatePunch(item.id, { remarks: e.target.value })} className="resize-none" />
                       </div>
 
-                      {/* Notes */}
                       <div>
                         <label className="block text-xs font-semibold text-gray-600 mb-1">Notes</label>
                         <textarea rows={2} defaultValue={resp?.notes || ''} placeholder="Additional notes…"
                           onBlur={e => updateNotes(item.id, e.target.value)} className="resize-none" />
                       </div>
 
-                      {/* Photos */}
                       <div>
-                        <label className="block text-xs font-semibold text-gray-600 mb-2">Photos</label>
+                        <label className="block text-xs font-semibold text-gray-600 mb-2">
+                          Photos <span className="text-red-500">*</span>
+                        </label>
                         <div className="flex flex-wrap gap-2">
                           {pphotos.map(photo => (
                             <div key={photo.id} className="relative w-20 h-20 rounded-lg overflow-hidden border border-gray-200">
-                              <img src={photo.url} alt="punch" className="w-full h-full object-cover" />
+                              <img src={photo.url} alt="punch" className="w-full h-full object-cover cursor-pointer"
+                                onClick={() => setLightboxUrl(photo.url)} />
                               <button onClick={() => removePunchPhoto(photo, item.id)}
-                                className="absolute top-0.5 right-0.5 bg-black/60 rounded-full p-0.5 text-white">
-                                <X size={10} />
-                              </button>
+                                className="absolute top-0.5 right-0.5 bg-black/60 rounded-full p-0.5 text-white"><X size={10} /></button>
+                              <button onClick={() => setLightboxUrl(photo.url)}
+                                className="absolute bottom-0.5 right-0.5 bg-black/60 rounded-full p-0.5 text-white"><ZoomIn size={10} /></button>
                             </div>
                           ))}
-                          <label className={`w-20 h-20 rounded-lg border-2 border-dashed border-orange-300 flex flex-col items-center justify-center cursor-pointer hover:bg-orange-50 transition-colors ${uploadingPhoto[item.id] ? 'opacity-50 pointer-events-none' : 'text-orange-400'}`}>
+                          <label className={`w-20 h-20 rounded-lg border-2 border-dashed flex flex-col items-center justify-center cursor-pointer transition-colors ${
+                            uploadingPhoto[item.id] ? 'opacity-50 pointer-events-none border-orange-300 text-orange-400'
+                            : hasPhotoError ? 'border-red-400 text-red-500 bg-red-50' : 'border-orange-300 text-orange-400 hover:bg-orange-50'}`}>
                             {uploadingPhoto[item.id]
                               ? <Loader2 size={20} className="animate-spin text-orange-400" />
                               : <><Camera size={20} /><span className="text-xs mt-1">Add</span></>}
@@ -508,18 +520,19 @@ export default function Checklist() {
                               onChange={e => handlePunchPhotoUpload(e, item.id)} />
                           </label>
                         </div>
+                        {hasPhotoError && (
+                          <p className="text-xs text-red-600 mt-1 font-semibold">⚠ At least 1 photo is required before closing</p>
+                        )}
                         {photoConfirmed[item.id] && (
-                          <div className="mt-2 flex items-center gap-1.5 text-green-600 text-xs font-semibold animate-pulse">
+                          <div className="mt-2 flex items-center gap-1.5 text-green-600 text-xs font-semibold">
                             <CheckCircle2 size={14} /> Photo saved successfully
                           </div>
                         )}
                       </div>
 
-                      {/* Done + Delete buttons */}
                       <div className="flex gap-2 pt-1">
-                        <button onClick={() => setExpandedItem(null)}
-                          className="flex-1 py-2 rounded-xl text-sm font-semibold text-white"
-                          style={{ background: '#d85a30' }}>
+                        <button onClick={() => handleDone(item.id, pphotos)}
+                          className="flex-1 py-2 rounded-xl text-sm font-semibold text-white" style={{ background: '#d85a30' }}>
                           Done
                         </button>
                         <button onClick={() => deletePunch(item.id)}

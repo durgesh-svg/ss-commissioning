@@ -4,6 +4,8 @@ import Login from './pages/Login'
 import Dashboard from './pages/Dashboard'
 import Checklist from './pages/Checklist'
 import PunchList from './pages/PunchList'
+import Settings from './pages/Settings'
+import TestRecords from './pages/TestRecords'
 import Layout from './components/Layout'
 
 function PrivateRoute({ children }) {
@@ -27,31 +29,31 @@ function AppRoutes() {
   return (
     <Routes>
       <Route path="/login" element={<Login />} />
-      <Route
-        path="/*"
-        element={
-          <PrivateRoute>
-            <Layout>
-              <Routes>
-                {profile?.is_admin ? (
-                  <>
-                    <Route path="/" element={<Dashboard />} />
-                    <Route path="/checklist" element={<Checklist />} />
-                    <Route path="/punches" element={<PunchList />} />
-                    <Route path="*" element={<Navigate to="/" replace />} />
-                  </>
-                ) : (
-                  <>
-                    <Route path="/" element={<Checklist />} />
-                    <Route path="/punches" element={<PunchList />} />
-                    <Route path="*" element={<Navigate to="/" replace />} />
-                  </>
-                )}
-              </Routes>
-            </Layout>
-          </PrivateRoute>
-        }
-      />
+      <Route path="/*" element={
+        <PrivateRoute>
+          <Layout>
+            <Routes>
+              {profile?.is_admin ? (
+                <>
+                  <Route path="/"          element={<Dashboard />} />
+                  <Route path="/checklist" element={<Checklist />} />
+                  <Route path="/punches"   element={<PunchList />} />
+                  <Route path="/records"   element={<TestRecords />} />
+                  <Route path="/settings"  element={<Settings />} />
+                  <Route path="*"          element={<Navigate to="/" replace />} />
+                </>
+              ) : (
+                <>
+                  <Route path="/"        element={<Checklist />} />
+                  <Route path="/punches" element={<PunchList />} />
+                  <Route path="/records" element={<TestRecords />} />
+                  <Route path="*"        element={<Navigate to="/" replace />} />
+                </>
+              )}
+            </Routes>
+          </Layout>
+        </PrivateRoute>
+      } />
     </Routes>
   )
 }
