@@ -158,10 +158,11 @@ export default function Checklist() {
 
   async function createPunch(item, sys, responseId) {
     const prefillContractor = contractorMap[sys.id] || ''
-    const { data } = await supabase
+    const { data, error } = await supabase
       .from('punch_points')
       .insert({ response_id: responseId, site_id: selectedSiteId, system_id: sys.id, item_id: item.id, contractor: prefillContractor })
       .select().single()
+    if (error) { alert('Punch create failed: ' + error.message); return null }
     if (data) setPunches(p => ({ ...p, [item.id]: data }))
     return data
   }
@@ -449,7 +450,7 @@ export default function Checklist() {
                   )}
 
                   {/* Punch expanded panel */}
-                  {isExpanded && isPunch && punch && (
+                  {isExpanded && isPunch && (
                     <div className="bg-orange-50 border-t border-orange-100 px-4 py-4 space-y-3">
                       <div className="flex items-center justify-between">
                         <p className="text-xs font-semibold text-orange-700">Punch Details</p>
