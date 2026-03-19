@@ -1,24 +1,58 @@
 {
+  "id": "/",
   "name": "SS Commissioning",
-  "short_name": "SS Commissioning",
-  "description": "Stockwell Solar Pre-Commissioning Checklist App",
+  "short_name": "SS Comm",
+  "description": "Stockwell Solar Pre-Commissioning Checklist App for site managers and admins",
   "start_url": "/",
+  "scope": "/",
   "display": "standalone",
+  "display_override": ["standalone", "minimal-ui"],
   "background_color": "#f9fafb",
   "theme_color": "#d85a30",
   "orientation": "portrait",
+  "lang": "en",
+  "dir": "ltr",
+  "categories": ["business", "utilities", "productivity"],
   "icons": [
     {
       "src": "/icons/icon-192.png",
       "sizes": "192x192",
       "type": "image/png",
-      "purpose": "any maskable"
+      "purpose": "any"
+    },
+    {
+      "src": "/icons/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "maskable"
     },
     {
       "src": "/icons/icon-512.png",
       "sizes": "512x512",
       "type": "image/png",
-      "purpose": "any maskable"
+      "purpose": "any"
+    },
+    {
+      "src": "/icons/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    }
+  ],
+  "shortcuts": [
+    {
+      "name": "Checklist",
+      "short_name": "Checklist",
+      "description": "Open site checklist",
+      "url": "/checklist",
+      "icons": [{ "src": "/icons/icon-192.png", "sizes": "192x192" }]
+    },
+    {
+      "name": "Punch List",
+      "short_name": "Punches",
+      "description": "View all punch points",
+      "url": "/punches",
+      "icons": [{ "src": "/icons/icon-192.png", "sizes": "192x192" }]
     }
   ]
 }
