@@ -6,7 +6,9 @@ import Checklist from './pages/Checklist'
 import PunchList from './pages/PunchList'
 import Settings from './pages/Settings'
 import TestRecords from './pages/TestRecords'
+import ErrorLog from './pages/ErrorLog'
 import Layout from './components/Layout'
+import ErrorBoundary from './components/ErrorBoundary'
 
 function PrivateRoute({ children }) {
   const { user, loading } = useAuth()
@@ -40,6 +42,7 @@ function AppRoutes() {
                   <Route path="/punches"   element={<PunchList />} />
                   <Route path="/records"   element={<TestRecords />} />
                   <Route path="/settings"  element={<Settings />} />
+                  <Route path="/errors"    element={<ErrorLog />} />
                   <Route path="*"          element={<Navigate to="/" replace />} />
                 </>
               ) : (
@@ -62,7 +65,9 @@ export default function App() {
   return (
     <BrowserRouter>
       <AuthProvider>
-        <AppRoutes />
+        <ErrorBoundary>
+          <AppRoutes />
+        </ErrorBoundary>
       </AuthProvider>
     </BrowserRouter>
   )

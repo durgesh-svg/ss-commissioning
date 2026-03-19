@@ -1,10 +1,16 @@
+import { useEffect } from 'react'
 import { Link, useLocation } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
-import { LayoutDashboard, CheckSquare, AlertTriangle, Settings, LogOut, FlaskConical } from 'lucide-react'
+import { LayoutDashboard, CheckSquare, AlertTriangle, Settings, LogOut, FlaskConical, Bug } from 'lucide-react'
+import { initGlobalErrorHandlers } from '../lib/errorLogger'
 
 export default function Layout({ children }) {
   const { profile, signOut } = useAuth()
   const location = useLocation()
+
+  useEffect(() => {
+    initGlobalErrorHandlers(profile?.id)
+  }, [profile?.id])
 
   const navItems = profile?.is_admin
     ? [
@@ -12,6 +18,7 @@ export default function Layout({ children }) {
         { to: '/checklist', icon: CheckSquare,     label: 'Checklist' },
         { to: '/punches',   icon: AlertTriangle,   label: 'Punches' },
         { to: '/records',   icon: FlaskConical,    label: 'Records' },
+        { to: '/errors',    icon: Bug,             label: 'Errors' },
         { to: '/settings',  icon: Settings,        label: 'Settings' },
       ]
     : [
