@@ -296,7 +296,6 @@ export default function Checklist() {
   async function deleteOkResponse(itemId) {
     const resp = responses[itemId]
     if (!resp) return
-    if (!window.confirm('Delete photos/notes and reset this item to blank?')) return
     const photos = respPhotos[resp.id] || []
     for (const ph of photos) await supabase.storage.from('punch-photos').remove([ph.storage_path])
     await supabase.from('response_photos').delete().eq('response_id', resp.id)
@@ -309,7 +308,6 @@ export default function Checklist() {
   async function deletePunch(itemId) {
     const punch = punches[itemId]
     const resp = responses[itemId]
-    if (!window.confirm('Delete this punch point and reset to blank?')) return
     setSaving(s => ({ ...s, [itemId]: true }))
     try {
       if (punch) {
