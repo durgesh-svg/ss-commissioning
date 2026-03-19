@@ -60,6 +60,13 @@ export default function Checklist() {
     }
   }
 
+  // Keep profile.site_id in sync with selected site so RLS INSERT checks pass
+  useEffect(() => {
+    if (selectedSiteId && profile?.id) {
+      supabase.from('profiles').update({ site_id: selectedSiteId }).eq('id', profile.id)
+    }
+  }, [selectedSiteId])
+
   useEffect(() => {
     if (selectedSiteId && systems.length) loadChecklist()
   }, [selectedSiteId, activeSystemIdx, systems])
