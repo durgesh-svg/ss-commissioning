@@ -251,19 +251,20 @@ export default function Checklist() {
 
   async function handlePunchPhotoUpload(e, itemId) {
     const punch = punches[itemId]
-    if (!punch) return
+    if (!punch) { alert('Punch not ready, try again'); return }
     const files = Array.from(e.target.files)
     if (!files.length) return
     setUploadingPhoto(u => ({ ...u, [itemId]: true }))
     for (const file of files) {
       const ext = file.name.split('.').pop()
       const path = `punches/${punch.id}/${Date.now()}.${ext}`
-      const { error } = await supabase.storage.from('punch-photos').upload(path, file)
-      if (error) continue
+      const { error: upErr } = await supabase.storage.from('punch-photos').upload(path, file)
+      if (upErr) { alert('Upload failed: ' + upErr.message); continue }
       const { data: urlData } = supabase.storage.from('punch-photos').getPublicUrl(path)
-      const { data: photo } = await supabase
+      const { data: photo, error: dbErr } = await supabase
         .from('punch_photos').insert({ punch_id: punch.id, storage_path: path, url: urlData.publicUrl })
         .select().single()
+      if (dbErr) { alert('Photo save failed: ' + dbErr.message); continue }
       if (photo) setPunchPhotos(ph => ({ ...ph, [punch.id]: [...(ph[punch.id] || []), photo] }))
     }
     setUploadingPhoto(u => ({ ...u, [itemId]: false }))
@@ -273,19 +274,20 @@ export default function Checklist() {
 
   async function handleRespPhotoUpload(e, itemId) {
     const resp = responses[itemId]
-    if (!resp) return
+    if (!resp) { alert('Response not ready, try again'); return }
     const files = Array.from(e.target.files)
     if (!files.length) return
     setUploadingPhoto(u => ({ ...u, [itemId]: true }))
     for (const file of files) {
       const ext = file.name.split('.').pop()
       const path = `responses/${resp.id}/${Date.now()}.${ext}`
-      const { error } = await supabase.storage.from('punch-photos').upload(path, file)
-      if (error) continue
+      const { error: upErr } = await supabase.storage.from('punch-photos').upload(path, file)
+      if (upErr) { alert('Upload failed: ' + upErr.message); continue }
       const { data: urlData } = supabase.storage.from('punch-photos').getPublicUrl(path)
-      const { data: photo } = await supabase
+      const { data: photo, error: dbErr } = await supabase
         .from('response_photos').insert({ response_id: resp.id, storage_path: path, url: urlData.publicUrl })
         .select().single()
+      if (dbErr) { alert('Photo save failed: ' + dbErr.message); continue }
       if (photo) setRespPhotos(rp => ({ ...rp, [resp.id]: [...(rp[resp.id] || []), photo] }))
     }
     setUploadingPhoto(u => ({ ...u, [itemId]: false }))
