@@ -149,6 +149,10 @@ export default function Checklist() {
     if (!sys || !selectedSiteId) return
     setSaving(s => ({ ...s, [item.id]: true }))
     try {
+      // Ensure profile.site_id matches selected site before RLS checks run
+      if (profile?.id) {
+        await supabase.from('profiles').update({ site_id: selectedSiteId }).eq('id', profile.id)
+      }
       const existing = responses[item.id]
       let respData
       if (existing) {
