@@ -1,5 +1,4 @@
 import { useEffect, useState } from 'react'
-import * as XLSX from 'xlsx'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../contexts/AuthContext'
 import {
@@ -102,7 +101,8 @@ export default function PunchList() {
     setSubmitting(s => ({ ...s, [punchId]: false }))
   }
 
-  function exportExcel() {
+  async function exportExcel() {
+    const XLSX = (await import('xlsx')).default
     const rows = filtered.map(p => ({
       Site: p.sites?.name,
       System: p.systems?.name,

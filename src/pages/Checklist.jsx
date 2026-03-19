@@ -85,37 +85,41 @@ export default function Checklist() {
     // Contractor pre-fill
     setContractorMap(prev => ({ ...prev, [sys.id]: contractorRes.data?.contractor_name || '' }))
 
-    // Load punch points
+    // Load punch points + response photos in parallel
     const punchItemIds = itemList.filter(i => respMap[i.id]?.status === 'punch').map(i => i.id)
-    if (punchItemIds.length) {
-      const punchRes = await supabase.from('punch_points').select('*').eq('site_id', selectedSiteId).in('item_id', punchItemIds)
-      const punchMap = {}
-      for (const p of punchRes.data || []) punchMap[p.item_id] = p
-      setPunches(punchMap)
-
-      const punchIds = (punchRes.data || []).map(p => p.id)
-      if (punchIds.length) {
-        const photoRes = await supabase.from('punch_photos').select('*').in('punch_id', punchIds)
-        const photoMap = {}
-        for (const ph of photoRes.data || []) {
-          if (!photoMap[ph.punch_id]) photoMap[ph.punch_id] = []
-          photoMap[ph.punch_id].push(ph)
-        }
-        setPunchPhotos(photoMap)
-      } else { setPunchPhotos({}) }
-    } else { setPunches({}); setPunchPhotos({}) }
-
-    // Load response photos
     const allRespIds = (responsesRes.data || []).map(r => r.id)
-    if (allRespIds.length) {
-      const rPhotoRes = await supabase.from('response_photos').select('*').in('response_id', allRespIds)
-      const rPhotoMap = {}
-      for (const ph of rPhotoRes.data || []) {
-        if (!rPhotoMap[ph.response_id]) rPhotoMap[ph.response_id] = []
-        rPhotoMap[ph.response_id].push(ph)
+
+    const [punchRes, rPhotoRes] = await Promise.all([
+      punchItemIds.length
+        ? supabase.from('punch_points').select('*').eq('site_id', selectedSiteId).in('item_id', punchItemIds)
+        : Promise.resolve({ data: [] }),
+      allRespIds.length
+        ? supabase.from('response_photos').select('*').in('response_id', allRespIds)
+        : Promise.resolve({ data: [] }),
+    ])
+
+    const punchMap = {}
+    for (const p of punchRes.data || []) punchMap[p.item_id] = p
+    setPunches(punchMap)
+
+    const rPhotoMap = {}
+    for (const ph of rPhotoRes.data || []) {
+      if (!rPhotoMap[ph.response_id]) rPhotoMap[ph.response_id] = []
+      rPhotoMap[ph.response_id].push(ph)
+    }
+    setRespPhotos(rPhotoMap)
+
+    // Load punch photos (needs punch IDs from above)
+    const punchIds = (punchRes.data || []).map(p => p.id)
+    if (punchIds.length) {
+      const photoRes = await supabase.from('punch_photos').select('*').in('punch_id', punchIds)
+      const photoMap = {}
+      for (const ph of photoRes.data || []) {
+        if (!photoMap[ph.punch_id]) photoMap[ph.punch_id] = []
+        photoMap[ph.punch_id].push(ph)
       }
-      setRespPhotos(rPhotoMap)
-    } else { setRespPhotos({}) }
+      setPunchPhotos(photoMap)
+    } else { setPunchPhotos({}) }
 
     setLoading(false)
   }
