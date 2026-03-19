@@ -128,12 +128,8 @@ export default function Checklist() {
       setExpandedItem(expandedItem === item.id ? null : item.id)
       return
     }
-    if (status === 'ok') {
-      setPendingPick(p => ({ ...p, [item.id]: 'ok' }))
-      setExpandedItem(item.id)
-    } else {
-      saveImmediately(item, 'punch') // creates response + punch record right away
-    }
+    // Both OK and Punch save immediately so photos can be uploaded right away
+    saveImmediately(item, status)
   }
 
   // Saves to DB immediately, marks item as pending-done (faded color until Done pressed)
@@ -288,10 +284,8 @@ export default function Checklist() {
       return
     }
     setPhotoErrors(e => ({ ...e, [item.id]: false }))
-    // Punch was already saved on click — just clear pending + close
-    // OK was not saved yet — save now
-    if (status === 'ok') await saveStatus(item, status)
-    else setPendingPick(p => { const n = { ...p }; delete n[item.id]; return n })
+    // Both OK and Punch are already saved on click — just clear pending + close
+    setPendingPick(p => { const n = { ...p }; delete n[item.id]; return n })
     setExpandedItem(null)
   }
 
