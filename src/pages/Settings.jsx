@@ -159,7 +159,6 @@ function SitesTab() {
   }
 
   async function deleteSite(id) {
-    if (!window.confirm('Remove this site? This will not delete existing data.')) return
     await supabase.from('sites').delete().eq('id', id)
     setSites(s => s.filter(x => x.id !== id))
   }
