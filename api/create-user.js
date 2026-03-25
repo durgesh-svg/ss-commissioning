@@ -20,10 +20,13 @@ export default async function handler(req, res) {
 
   if (error) return res.status(400).json({ error: error.message })
 
-  // Update profile is_admin flag
-  if (is_admin) {
-    await admin.from('profiles').update({ is_admin: true }).eq('id', data.user.id)
-  }
+  // Always create profile (trigger may not fire for admin-created users)
+  const { error: profErr } = await admin.from('profiles').upsert({
+    id: data.user.id,
+    email,
+    is_admin: !!is_admin
+  })
+  if (profErr) console.error('Profile upsert error:', profErr.message)
 
   return res.status(200).json({ user: data.user })
 }
