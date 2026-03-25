@@ -6,10 +6,11 @@ export default async function handler(req, res) {
   const { email, password, is_admin } = req.body
   if (!email || !password) return res.status(400).json({ error: 'Email and password required' })
 
-  const admin = createClient(
-    process.env.VITE_SUPABASE_URL,
-    process.env.SUPABASE_SERVICE_ROLE_KEY
-  )
+  const url = process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL
+  const key = process.env.SUPABASE_SERVICE_ROLE_KEY
+  if (!url || !key) return res.status(500).json({ error: `Missing env: url=${!!url} key=${!!key}` })
+
+  const admin = createClient(url, key)
 
   const { data, error } = await admin.auth.admin.createUser({
     email,
