@@ -6,9 +6,8 @@ export default async function handler(req, res) {
   const { email, password, is_admin } = req.body
   if (!email || !password) return res.status(400).json({ error: 'Email and password required' })
 
-  const url = process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL
-  const key = process.env.SUPABASE_SERVICE_ROLE_KEY
-  if (!url || !key) return res.status(500).json({ error: `Missing env: url=${!!url} key=${!!key}` })
+  const url = 'https://yvlagovdcxwmfkefdrnv.supabase.co'
+  const key = process.env.SUPABASE_SERVICE_ROLE_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inl2bGFnb3ZkY3h3bWZrZWZkcm52Iiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3MzQ4Nzc4NCwiZXhwIjoyMDg5MDYzNzg0fQ.yJeoqr0mftQiW3mrbEHG7cfMigvsMZYOkb60iXIi444'
 
   const admin = createClient(url, key)
 
