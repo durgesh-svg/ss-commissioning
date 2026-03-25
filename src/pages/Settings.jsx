@@ -65,17 +65,14 @@ function UsersTab() {
   async function createUser() {
     if (!newEmail || !newPass) { setError('Email and password required'); return }
     setCreating(true); setError(''); setSuccess('')
-    const { data, error: e } = await supabase.functions.invoke('create-user', {
-      body: { email: newEmail, password: newPass, is_admin: newIsAdmin }
+    const res = await fetch('/api/create-user', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email: newEmail, password: newPass, is_admin: newIsAdmin })
     })
-    if (e || data?.error) {
-      // fallback: use admin API via service role — we'll do it via SQL function
-      const { error: rpcErr } = await supabase.rpc('admin_create_user', {
-        p_email: newEmail, p_password: newPass, p_is_admin: newIsAdmin
-      })
-      if (rpcErr) { setError(rpcErr.message); setCreating(false); return }
-    }
-    setSuccess(`User ${newEmail} created`)
+    const json = await res.json()
+    if (!res.ok || json.error) { setError(json.error || 'Failed to create user'); setCreating(false); return }
+    setSuccess(`User ${newEmail} created successfully`)
     setNewEmail(''); setNewPass(''); setNewIsAdmin(false)
     setCreating(false)
     await loadData()
